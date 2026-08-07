@@ -37,7 +37,7 @@ from ..model.losses import (
 )
 from ..model.mel_processing import mel_spectrogram_torch, spec_to_mel_torch
 from ..model.synthesizer import Synthesizer
-from .guards import BudgetGuard, HealthGuard, TrainingHalted, alignment_entropy
+from .guards import BudgetGuard, HealthGuard, TrainingHalted
 
 
 @dataclass
@@ -95,6 +95,9 @@ class Trainer:
         self.sched_g = torch.optim.lr_scheduler.ExponentialLR(self.opt_g, gamma=decay)
         self.sched_d = torch.optim.lr_scheduler.ExponentialLR(self.opt_d, gamma=decay)
 
+        # The config carries a clip value; passing None here silently
+        # disabled it, which is how an unclipped run reached the guards.
+        self.grad_clip = self.train_cfg.get("grad_clip")
         self.use_amp = bool(self.train_cfg.get("fp16_run", False)) and device == "cuda"
         self.scaler = torch.amp.GradScaler("cuda", enabled=self.use_amp)
 
@@ -104,7 +107,12 @@ class Trainer:
             hourly_rate_usd=self.train_cfg.get("hourly_rate_usd", 0.80),
             max_cost_usd=self.train_cfg.get("max_cost_usd"),
         )
-        self.health = HealthGuard(self.train_cfg.get("guards", {}))
+        guards = dict(self.train_cfg.get("guards", {}))
+        self.health = HealthGuard(
+            guards,
+            warmup_steps=guards.pop("warmup_steps", 500),
+            nonfinite_patience=guards.pop("nonfinite_patience", 20),
+        )
         self.state = TrainState()
 
     # -- schedules --------------------------------------------------------
@@ -162,7 +170,7 @@ class Trainer:
         self.opt_d.zero_grad(set_to_none=True)
         self.scaler.scale(loss_disc).backward()
         self.scaler.unscale_(self.opt_d)
-        grad_norm_d = commons.clip_grad_value_(self.net_d.parameters(), None)
+        grad_norm_d = commons.clip_grad_value_(self.net_d.parameters(), self.grad_clip)
         self.scaler.step(self.opt_d)
 
         loss_dur_disc = torch.zeros((), device=dev)
@@ -205,7 +213,7 @@ class Trainer:
         self.opt_g.zero_grad(set_to_none=True)
         self.scaler.scale(loss_g).backward()
         self.scaler.unscale_(self.opt_g)
-        grad_norm_g = commons.clip_grad_value_(self.net_g.parameters(), None)
+        grad_norm_g = commons.clip_grad_value_(self.net_g.parameters(), self.grad_clip)
         self.scaler.step(self.opt_g)
         self.scaler.update()
 
@@ -221,7 +229,7 @@ class Trainer:
             "loss_dur_disc": float(loss_dur_disc),
             "grad_norm": float(grad_norm_g),
             "grad_norm_d": float(grad_norm_d),
-            "alignment_entropy": alignment_entropy(attn),
+            "alignment_entropy": self.net_g.diagnostics.get("alignment_entropy", float("nan")),
             "mas_noise": self.mas_noise_scale(),
             "lr": self.sched_g.get_last_lr()[0],
         }

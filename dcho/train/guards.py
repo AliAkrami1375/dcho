@@ -79,10 +79,25 @@ class HealthGuard:
     Configured from the `guards` block of a config file. Each entry is
     either a `{step, value}` pair meaning "by this step, this metric must
     be at or below this value", or a bare float meaning "at every step".
+
+    Two things this has to get right, both learned the hard way.
+
+    Nothing is checked during warmup. The first steps of a fresh
+    adversarial model produce loss and gradient values that look
+    catastrophic and are simply what initialisation looks like.
+
+    A single non-finite gradient norm is not a failure. With mixed
+    precision the gradient scaler starts deliberately high, overflows,
+    detects it, skips the step and backs off - that is the algorithm
+    working, not breaking. Only a run of consecutive non-finite norms
+    means the model itself has diverged.
     """
 
     config: dict
+    warmup_steps: int = 500
+    nonfinite_patience: int = 20
     _tripped: bool = False
+    _nonfinite_streak: int = 0
 
     # Maps a config key onto the metric name the training loop reports.
     CHECKS_AT_STEP = {
@@ -95,6 +110,26 @@ class HealthGuard:
 
     def check(self, step: int, metrics: dict) -> None:
         if self._tripped:
+            return
+
+        # A non-finite gradient norm is tracked from the first step, but
+        # only acted on once it persists: the scaler resolves the transient
+        # kind within a handful of steps.
+        grad_norm = metrics.get("grad_norm")
+        if grad_norm is not None and not math.isfinite(grad_norm):
+            self._nonfinite_streak += 1
+            if self._nonfinite_streak > self.nonfinite_patience:
+                self._tripped = True
+                raise TrainingHalted(
+                    "health_grad_norm",
+                    f"gradient norm was non-finite for {self._nonfinite_streak} "
+                    "consecutive steps; the model has diverged rather than the "
+                    "loss scaler merely backing off",
+                )
+            return
+        self._nonfinite_streak = 0
+
+        if step < self.warmup_steps:
             return
 
         for key, metric in self.CHECKS_AT_STEP.items():
@@ -134,23 +169,23 @@ class HealthGuard:
         for key, metric in self.CEILING_CHECKS.items():
             ceiling = self.config.get(key)
             value = metrics.get(metric)
-            if ceiling is None or value is None:
+            if ceiling is None or value is None or not math.isfinite(value):
                 continue
-            if not math.isfinite(value) or value > ceiling:
+            if value > ceiling:
                 self._tripped = True
                 raise TrainingHalted(
-                    f"health_{metric}", f"{metric}={value} exceeded {ceiling}"
+                    f"health_{metric}", f"{metric}={value:.1f} exceeded {ceiling}"
                 )
 
 
 def alignment_entropy(attn) -> float:
-    """How concentrated the alignment is, normalised to [0, 1].
+    """Entropy of an alignment matrix, normalised to [0, 1].
 
-    Computed over the hard alignment's implied duration distribution. A run
-    whose alignment has locked in produces a low value; one still smearing
-    probability across the text axis stays high. This is the earliest
-    reliable signal that a text-to-speech run is going to work, which is why
-    it is the first guard to fire.
+    Kept for tests and for inspecting a soft alignment. Note that the
+    monotonic search returns a one-hot path, whose entropy is identically
+    zero and therefore carries no information - the figure the training loop
+    reports comes from the model's soft posterior instead, recorded in
+    `Synthesizer.diagnostics` before the search hardens it.
     """
     import torch
 

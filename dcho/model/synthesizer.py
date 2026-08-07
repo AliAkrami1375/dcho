@@ -90,6 +90,12 @@ class Synthesizer(nn.Module):
         **kwargs,
     ):
         super().__init__()
+
+        # Values the training loop reads back for its health checks. Kept
+        # here rather than threaded through the return tuple, so adding a
+        # diagnostic does not change the forward signature.
+        self.diagnostics: dict[str, float] = {}
+
         self.segment_size = segment_size
         self.n_speakers = n_speakers
         self.use_sdp = use_sdp
@@ -160,8 +166,7 @@ class Synthesizer(nn.Module):
             return self.emb_g(sid).unsqueeze(-1)
         return None
 
-    @staticmethod
-    def _align(z_p, m_p, logs_p, x_mask, y_mask, mas_noise_scale: float = 0.0):
+    def _align(self, z_p, m_p, logs_p, x_mask, y_mask, mas_noise_scale: float = 0.0):
         """Monotonic alignment between phonemes and frames.
 
         `mas_noise_scale` implements the VITS2 noise-scaled search. Early in
@@ -182,8 +187,27 @@ class Synthesizer(nn.Module):
                 epsilon = torch.std(neg_cent) * torch.randn_like(neg_cent) * mas_noise_scale
                 neg_cent = neg_cent + epsilon
 
-            # neg_cent is [B, T_spec, T_text]; the search wants text first.
             attn_mask = torch.unsqueeze(x_mask, 2) * torch.unsqueeze(y_mask, -1)
+
+            # Alignment confidence, recorded before the search hardens it.
+            #
+            # The search returns a one-hot path by construction, so its own
+            # entropy is identically zero and says nothing. What is
+            # diagnostic is the *soft* posterior it chooses from: for each
+            # frame, how sharply the model prefers one phoneme over the
+            # others. Near 1 means it cannot tell them apart; falling
+            # towards 0 is the earliest reliable sign a run will work.
+            valid = attn_mask.squeeze(1).bool()
+            logp = neg_cent.masked_fill(~valid, -1e4).log_softmax(dim=-1)
+            probs = logp.exp()
+            frame_entropy = -(probs * logp).sum(dim=-1)
+            n_text = valid.any(dim=1).sum(dim=-1).clamp(min=2).float()
+            norm = torch.log(n_text).unsqueeze(-1)
+            frame_valid = valid.any(dim=-1).float()
+            entropy = ((frame_entropy / norm) * frame_valid).sum() / frame_valid.sum().clamp(min=1)
+            self.diagnostics["alignment_entropy"] = float(entropy)
+
+            # neg_cent is [B, T_spec, T_text]; the search wants text first.
             path = maximum_path(neg_cent.transpose(1, 2), attn_mask.squeeze(1).transpose(1, 2))
             return path.transpose(1, 2).unsqueeze(1).detach()
 
