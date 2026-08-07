@@ -230,7 +230,13 @@ def collate(batch, config: DataConfig):
     text_lengths = torch.zeros(n, dtype=torch.long)
     wav = torch.zeros(n, 1, max_wav)
     wav_lengths = torch.zeros(n, dtype=torch.long)
-    sid = torch.zeros(n, dtype=torch.long)
+
+    # A speaker is either a cluster id or a continuous vector, depending on
+    # which conditioning path the model was built with. The batch carries
+    # whichever the dataset produced and the model validates the shape.
+    first = batch[0][2]
+    vectors = isinstance(first, np.ndarray)
+    sid = (torch.zeros(n, len(first)) if vectors else torch.zeros(n, dtype=torch.long))
 
     for i, (ids, audio, speaker, _) in enumerate(batch):
         text[i, : len(ids)] = torch.tensor(ids, dtype=torch.long)
@@ -238,7 +244,10 @@ def collate(batch, config: DataConfig):
         usable = len(audio) // hop * hop
         wav[i, 0, :usable] = torch.from_numpy(audio[:usable])
         wav_lengths[i] = usable
-        sid[i] = speaker
+        if vectors:
+            sid[i] = torch.from_numpy(np.asarray(speaker, dtype=np.float32))
+        else:
+            sid[i] = speaker
 
     spec = spectrogram_torch(
         wav.squeeze(1), config.filter_length, config.hop_length, config.win_length
@@ -254,6 +263,117 @@ def collate(batch, config: DataConfig):
         "wav_lengths": wav_lengths,
         "sid": sid,
     }
+
+
+class PackedSpeechDataset(IterableDataset):
+    """Reads the compact dataset produced by `jobs/pack_subset.py`.
+
+    That format carries everything a training step needs in one row - FLAC
+    audio, transcript, and the speaker vector - so nothing has to be joined
+    against a second source at load time. It exists for environments that
+    cannot mount the corpus repository, Colab in particular, where the whole
+    split has to arrive over the network before training can start.
+    """
+
+    def __init__(
+        self,
+        data_dir: str | Path,
+        config: DataConfig,
+        frontend: Frontend | None = None,
+        seed: int = 1234,
+        infinite: bool = True,
+    ):
+        super().__init__()
+        self.files = sorted(Path(data_dir).rglob("*.parquet"))
+        if not self.files:
+            raise FileNotFoundError(f"no packed shards under {data_dir}")
+        self.config = config
+        self.frontend = frontend or Frontend(add_blank=config.add_blank)
+        self.seed = seed
+        self.infinite = infinite
+
+    def _decode(self, blob: bytes) -> np.ndarray | None:
+        """Decode a packed audio blob to mono float32.
+
+        Prefers soundfile, which handles the FLAC the packer writes, and
+        falls back to the stdlib WAV reader. The fallback is not just for
+        convenience: it means a training environment without libsndfile can
+        still read a PCM-packed dataset instead of failing silently with an
+        empty loader.
+        """
+        try:
+            import soundfile as sf
+
+            audio, sr = sf.read(io.BytesIO(blob), dtype="float32", always_2d=True)
+            if sr != self.config.sampling_rate:
+                return None
+            return audio.mean(axis=1)
+        except ImportError:
+            pass
+        except Exception:
+            return None
+        return _read_wav(blob)
+
+    def _examples(self, epoch: int):
+        import pyarrow.parquet as pq
+
+        cfg = self.config
+        rng = random.Random(self.seed + epoch * 7919)
+
+        plan: list[tuple[Path, int]] = []
+        for path in self.files:
+            plan.extend((path, g) for g in range(pq.ParquetFile(path).num_row_groups))
+
+        info = get_worker_info()
+        if info is not None:
+            plan = plan[info.id :: info.num_workers]
+        rng.shuffle(plan)
+
+        buffer: list = []
+        readers: dict[Path, object] = {}
+
+        for path, group in plan:
+            pf = readers.get(path)
+            if pf is None:
+                pf = readers[path] = pq.ParquetFile(path)
+            d = pf.read_row_group(group).to_pydict()
+
+            for i in range(len(d["idx"])):
+                audio = self._decode(d["audio"][i])
+                if audio is None:
+                    continue
+                seconds = len(audio) / cfg.sampling_rate
+                if not (cfg.min_audio_seconds <= seconds <= cfg.max_audio_seconds):
+                    continue
+
+                text = d["text"][i]
+                if not text or len(text) > cfg.max_text_length:
+                    continue
+                try:
+                    ids = self.frontend(text).ids
+                except Exception:
+                    continue
+                if len(ids) < 4:
+                    continue
+
+                vector = np.frombuffer(d["speaker_vector"][i], dtype=np.float16).astype(np.float32)
+                buffer.append((ids, audio, vector, int(d["idx"][i])))
+
+                if len(buffer) >= cfg.shuffle_buffer:
+                    j = rng.randrange(len(buffer))
+                    buffer[j], buffer[-1] = buffer[-1], buffer[j]
+                    yield buffer.pop()
+
+        rng.shuffle(buffer)
+        yield from buffer
+
+    def __iter__(self):
+        epoch = 0
+        while True:
+            yield from self._examples(epoch)
+            epoch += 1
+            if not self.infinite:
+                return
 
 
 def load_speaker_map(path: str | Path) -> dict[int, int]:
