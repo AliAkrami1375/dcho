@@ -1,0 +1,319 @@
+# dcho golden test set for the Persian text-to-phoneme frontend.
+#
+# Format: 4 tab-separated columns, one sentence per line.
+#   1. id        three-digit id, unique. A leading `?` marks a row whose
+#                phonemization the author was NOT fully confident about;
+#                those rows need human review before they are trusted as
+#                ground truth. Everything else is asserted with confidence.
+#   2. category  one of: ezafe homograph stress numbers zwnj arabic
+#                foreign punctuation names general
+#   3. text      the input, in normal Persian orthography (ZWNJ included
+#                where standard, Persian-Indic digits, Persian punctuation)
+#   4. phonemes  the expected output of the text frontend
+#
+# Lines beginning with `#` are comments and are skipped by the loader.
+#
+# Symbol inventory: exactly the one defined in dcho/text/phonemes.py.
+# No symbol outside that inventory may appear in column 4 (enforced by
+# tests/test_golden.py, which tokenizes every row and fails on any UNK).
+#
+# Register: neutral formal Tehrani Persian, as read aloud by an educated
+# speaker. Written forms only (نمی‌دانم, not نمی‌دونم); no colloquial
+# reductions (است, not ه; را, not رو).
+#
+# ---------------------------------------------------------------------
+# CONVENTIONS
+# ---------------------------------------------------------------------
+#
+# EZAFE
+#   The ezafe linker is written as `-` appended to the word that carries
+#   it, never as a separate token: کتابِ من -> `ket1Ab- m1an`.
+#   `-` always encodes the /e/ of the linker. When the host word ends in
+#   a vowel the linker surfaces as /ye/; the linking glide is then written
+#   OUT EXPLICITLY as `y` before the marker, so that column 4 is a literal
+#   segmental transcription and the ezafe stays machine-detectable:
+#       خانهٔ من      -> x A n 1e y -   ->  `xAn1ey- m1an`      (= xāneye man)
+#       صدای موسیقی   ->                   `sed1Ay- musiq1i`   (= sedāye musiqi)
+#       دانشجوی پزشکی ->                   `dAneshj1uy- pezeshk1i`
+#   Words whose spelling already ends in a consonantal /y/ (روی, پای) need
+#   no extra glide: `r1uy-`.
+#   Rows where NO ezafe applies are included on purpose; they are the other
+#   half of the test and are just as load-bearing as the positive rows.
+#
+# STRESS
+#   `1` is placed immediately before the vowel of the stressed syllable,
+#   exactly one per phonological word. Words written WITHOUT a stress mark
+#   are unstressed on purpose:
+#     - monosyllabic function words: را به از در با بر تا که و هر
+#     - enclitics, which never move the host's stress:
+#       possessive/personal endings (ـم ـت ـش ـمان ـتان ـشان),
+#       verb person endings (خریدم -> xar1idam, stress on the stem),
+#       the indefinite ـی (کتابی -> ket1Abi, فیلم خوبی -> f1ilm- x1ubi),
+#       the past participle ـه (رفته -> r1afte).
+#   Stress rules applied:
+#     - nouns/adjectives: final syllable (مادر -> mAd1ar, خانه -> xAn1e)
+#       including the relational ـی (ایرانی -> irAn1i) and ـتر (زودتر -> zudt1ar)
+#     - simple past/present verbs: last syllable of the stem
+#       (رفتند -> r1aftand, آمد -> Am1ad, کردیم -> k1ardim)
+#     - verbal prefixes می‌ بـ نـ take the stress
+#       (می‌روم -> m1iravam, بنویس -> b1enevis, نمی‌روم -> n1emiravam)
+#     - the copula written as a separate word carries stress (است -> 1ast)
+#     - vocatives shift stress to the first syllable
+#       (علی! -> '1ali, but علی آمد -> 'al1i Am1ad)
+#     - in compound verbs the nominal element keeps its own stress
+#       (بازی می‌کنند -> bAz1i m1ikonand)
+#
+# GLOTTAL STOP
+#   `'` is written only where the orthography has ع or ء/ئ/أ
+#   (علی -> `'al1i`, ساعت -> `sA'1at`, رئیس -> `ra'1is`).
+#   A word-initial vowel spelled with ا/آ is written bare (امروز -> `emr1uz`,
+#   او -> `1u`): its glottal onset is automatic and predictable, so writing
+#   it would only add a symbol the frontend must learn to insert.
+#
+# DIPHTHONGS
+#   Written as vowel + glide sequences, using the two glides the inventory
+#   actually has: /ey/ is `ey` and /ow/ is `ov`. There is no `w` symbol,
+#   and `j` is the affricate ج (IPA d͡ʒ), so `ej`/`ow` would be wrong here:
+#       قیمت -> `qeym1at`   کی -> `k1ey`     حسین -> `hos1eyn`
+#       روشن -> `rovsh1an`  چطور -> `chet1ovr`  فردوسی -> `ferdovs1i`
+#
+# BREAKS
+#   Emitted only where the source text actually has punctuation, and
+#   separated from neighbouring words by a space:
+#     ، ؛ : … ( )   -> `|`        . (sentence end) -> `||`
+#     ؟             -> `?`        !                -> `!`
+#   Text with no final punctuation gets no final break.
+#
+# ---------------------------------------------------------------------
+# id	category	text	phonemes
+001	ezafe	کتاب من روی میز است	ket1Ab- m1an r1uy- m1iz 1ast
+002	ezafe	کتاب خوب گران است	ket1Ab- x1ub ger1An 1ast
+003	ezafe	خانه‌ی من بزرگ است	xAn1ey- m1an boz1org 1ast
+?004	ezafe	در خانهٔ پدر من بسته بود	d1ar- xAn1ey- ped1ar- m1an b1aste b1ud
+005	ezafe	کتاب‌های دانشجویان دانشگاه تهران	ketAbh1Ay- dAneshjuy1An- dAneshg1Ah- tehr1An
+006	ezafe	رنگ آسمان آبی است	r1ang- Asem1An Ab1i 1ast
+007	ezafe	مدیر شرکت آمد	mod1ir- sherk1at Am1ad
+008	ezafe	صدای موسیقی بلند بود	sed1Ay- musiq1i bol1and b1ud
+009	ezafe	برادر بزرگ من دکتر است	barAd1ar- boz1org- m1an dokt1or 1ast
+010	ezafe	دست راست او درد می‌کند	d1ast- r1Ast- 1u d1ard m1ikonad
+011	ezafe	روز اول ماه	r1uz- avv1al- m1Ah
+012	ezafe	مردم شهر خوشحال بودند	mard1om- sh1ahr xoshh1Al b1udand
+013	ezafe	کیف مریم روی صندلی است	k1if- mary1am r1uy- sandal1i 1ast
+014	ezafe	کتاب را خواندم	ket1Ab rA x1Andam
+015	ezafe	من کتاب خریدم	m1an ket1Ab xar1idam
+016	ezafe	او به خانه رفت	1u be xAn1e r1aft
+017	ezafe	باران می‌بارد	bAr1An m1ibArad
+018	ezafe	هوا سرد است	hav1A s1ard 1ast
+019	ezafe	علی نامه را نوشت	'al1i nAm1e rA nev1esht
+020	ezafe	دفتر مدرسه‌ی ما	daft1ar- madras1ey- m1A
+021	ezafe	آب دریای خزر شور است	1Ab- dary1Ay- xaz1ar sh1ur 1ast
+022	ezafe	پسر همسایهٔ ما	pes1ar- hamsAy1ey- m1A
+023	ezafe	امروز هوا خوب است	emr1uz hav1A x1ub 1ast
+024	ezafe	مادر دوست من معلم است	mAd1ar- d1ust- m1an mo'all1em 1ast
+025	ezafe	سر کلاس ریاضی	s1ar- kel1As- riyAz1i
+026	ezafe	وسط اتاق ایستاد	vas1at- ot1Aq ist1Ad
+027	ezafe	زیر میز آشپزخانه	z1ir- m1iz- AshpazxAn1e
+028	ezafe	او را دیدم	1u rA d1idam
+029	ezafe	صبح روز جمعه	s1obh- r1uz- jom'1e
+030	ezafe	جلد دوم کتاب	j1eld- dovv1om- ket1Ab
+031	ezafe	بچه‌ها در حیاط بازی می‌کنند	bachcheh1A dar hay1At bAz1i m1ikonand
+032	ezafe	طعم غذای ایرانی	t1a'm- qaz1Ay- irAn1i
+033	ezafe	فردا به مدرسه می‌روم	fard1A be madras1e m1iravam
+034	ezafe	نام پدر او	n1Am- ped1ar- 1u
+035	ezafe	خانهٔ بزرگ پدربزرگ من	xAn1ey- boz1org- pedarboz1org- m1an
+036	ezafe	من هر روز ورزش می‌کنم	m1an har r1uz varz1esh m1ikonam
+037	ezafe	رنگ چشمان او آبی است	r1ang- cheshm1An- 1u Ab1i 1ast
+038	ezafe	کتاب تاریخ ایران را خواندم	ket1Ab- tAr1ix- ir1An rA x1Andam
+039	ezafe	این کتاب مال من است	1in ket1Ab m1Al- m1an 1ast
+040	ezafe	او کتاب و دفتر خرید	1u ket1Ab o daft1ar xar1id
+041	homograph	کرم او زبانزد همه است	kar1am- 1u zabAnz1ad- ham1e 1ast
+042	homograph	کرم در خاک زندگی می‌کند	k1erm dar x1Ak zendeg1i m1ikonad
+043	homograph	این کرم پوست را نرم می‌کند	1in ker1em p1ust rA n1arm m1ikonad
+044	homograph	آن مرد را دیدم	1An m1ard rA d1idam
+045	homograph	پدربزرگم پارسال مرد	pedarboz1orgam pArs1Al m1ord
+046	homograph	هوای امروز سرد است	hav1Ay- emr1uz s1ard 1ast
+047	homograph	دست‌هایم سرد شد	dasth1Ayam s1ard sh1od
+048	homograph	سرود ملی را خواندند	sor1ud- mell1i rA x1Andand
+?049	homograph	شاعر شعری در وصف بهار سرود	shA'1er sh1e'ri dar v1asf- bah1Ar sor1ud
+050	homograph	کتاب را بر روی میز گذاشت	ket1Ab rA bar r1uy- m1iz goz1Asht
+?051	homograph	ورق‌ها را بر زد	varaqh1A rA b1or z1ad
+052	homograph	این گل بوی خوبی دارد	1in g1ol b1uy- x1ubi d1Arad
+053	homograph	زمین پر از گل بود	zam1in p1or az g1el b1ud
+054	homograph	شهر تهران بزرگ است	sh1ahr- tehr1An boz1org 1ast
+055	homograph	در این شهر باران زیاد می‌بارد	dar 1in sh1ahr bAr1An ziy1Ad m1ibArad
+056	homograph	کشت گندم امسال خوب بود	k1esht- gand1om ems1Al x1ub b1ud
+057	homograph	او مار را کشت	1u m1Ar rA k1osht
+058	homograph	تیم ما بازی را برد	t1im- m1A bAz1i rA b1ord
+059	homograph	او کتاب را با خود برد	1u ket1Ab rA bA x1od b1ord
+060	homograph	مهر مادر بی‌پایان است	m1ehr- mAd1ar bipAy1An 1ast
+061	homograph	نامه را مهر کردند	nAm1e rA m1ohr k1ardand
+062	homograph	رشت شهر بارانی است	r1asht sh1ahr- bArAn1i 1ast
+063	homograph	از تهران به رشت رفتیم	az tehr1An be r1asht r1aftim
+064	homograph	نظر شما چیست؟	naz1ar- shom1A ch1ist ?
+065	homograph	نظر او درست بود	naz1ar- 1u dor1ost b1ud
+066	homograph	درد دندان دارم	d1ard- dand1An d1Aram
+067	homograph	او از درد فریاد زد	1u az d1ard fary1Ad z1ad
+068	homograph	پر پرنده روی زمین افتاد	p1ar- parand1e r1uy- zam1in oft1Ad
+069	homograph	لیوان پر از آب است	liv1An p1or az 1Ab 1ast
+070	homograph	این لباس برایم تنگ است	1in leb1As barAy1am t1ang 1ast
+071	homograph	ماهی در تنگ شنا می‌کرد	m1Ahi dar t1ong shen1A m1ikard
+072	stress	من به بازار می‌روم	m1an be bAz1Ar m1iravam
+073	stress	من به بازار نمی‌روم	m1an be bAz1Ar n1emiravam
+074	stress	من جواب را می‌دانم	m1an jav1Ab rA m1idAnam
+075	stress	من جواب را نمی‌دانم	m1an jav1Ab rA n1emidAnam
+076	stress	می‌خواهم بروم	m1ixAham b1eravam
+077	stress	نمی‌خواهم بروم	n1emixAham b1eravam
+078	stress	این جمله را بنویس	1in joml1e rA b1enevis
+079	stress	این جمله را ننویس	1in joml1e rA n1anevis
+080	stress	من در بیمارستان کار می‌کنم	m1an dar bimArest1An k1Ar m1ikonam
+081	stress	او به من تلفن کرد	1u be m1an telef1on k1ard
+?082	stress	علی، کجا رفتی؟	'1ali | koj1A r1afti ?
+?083	stress	مریم، لطفاً در را ببند	m1aryam | lotf1an d1ar rA b1eband
+084	stress	معلم ما مهربان است	mo'all1em- m1A mehrab1An 1ast
+085	stress	دانشجویان امتحان دادند	dAneshjuy1An emtah1An d1Adand
+086	stress	او تصمیم گرفت	1u tasm1im ger1eft
+?087	stress	باید زودتر بروم	b1Ayad zudt1ar b1eravam
+088	stress	من می‌توانم فارسی صحبت کنم	m1an m1itavAnam fArs1i sohb1at k1onam
+089	stress	من نمی‌توانم فارسی صحبت کنم	m1an n1emitavAnam fArs1i sohb1at k1onam
+090	stress	هر روز به مدرسه می‌رفتم	har r1uz be madras1e m1iraftam
+091	stress	به من بگو چه شد	be m1an b1egu ch1e sh1od
+092	stress	او به من زنگ زد	1u be m1an z1ang z1ad
+093	stress	کتابخانهٔ شهر بزرگ است	ketAbxAn1ey- sh1ahr boz1org 1ast
+094	stress	او چیزی نگفت	1u ch1izi n1agoft
+095	stress	دیروز به مدرسه نرفتم	dir1uz be madras1e n1araftam
+?096	stress	او دیروز از سفر برگشت	1u dir1uz az saf1ar b1argasht
+?097	stress	آقای محمدی، بفرمایید	Aq1Ay- mohammad1i | b1efarmAyid
+098	numbers	من ۳ کتاب خریدم	m1an s1e ket1Ab xar1idam
+099	numbers	او ۱۲ سال دارد	1u davAzd1ah s1Al d1Arad
+100	numbers	قیمت این کتاب ۵۰۰ تومان است	qeym1at- 1in ket1Ab pAns1ad tum1An 1ast
+101	numbers	او ساعت ۸ صبح آمد	1u sA'1at- h1asht- s1obh Am1ad
+?102	numbers	جلسه ساعت ۱۰:۳۰ شروع می‌شود	jals1e sA'1at- d1ah o n1im shor1u' m1ishavad
+103	numbers	امروز ۲۲ بهمن است	emr1uz b1ist o d1o bahm1an 1ast
+?104	numbers	او در سال ۱۴۰۰ به دنیا آمد	1u dar s1Al- hez1Ar o chahArs1ad be dony1A Am1ad
+105	numbers	۲۰٪ تخفیف گرفتم	b1ist dars1ad taxf1if ger1eftam
+106	numbers	او ۱ برادر و ۲ خواهر دارد	1u y1ek barAd1ar o d1o xAh1ar d1Arad
+107	numbers	کلاس ۹ صبح شروع شد	kel1As- n1oh- s1obh shor1u' sh1od
+?108	numbers	کد شهر تهران ۰۲۱ است	k1od- sh1ahr- tehr1An s1efr o b1ist o y1ek 1ast
+109	numbers	۳ نفر آمدند	s1e naf1ar Am1adand
+110	numbers	این کتاب ۲۵۰ صفحه دارد	1in ket1Ab dev1ist o panj1Ah safh1e d1Arad
+?111	numbers	قرن ۲۱ قرن فناوری است	q1arn- b1ist o y1ekom q1arn- fanAvar1i 1ast
+112	numbers	دما ۳۵ درجه است	dam1A s1i o p1anj daraj1e 1ast
+113	numbers	۱۰۰ متر دویدم	s1ad m1etr dav1idam
+?114	numbers	او در سال ۱۹۹۵ به دنیا آمد	1u dar s1Al- hez1Ar o nohs1ad o nav1ad o p1anj be dony1A Am1ad
+115	numbers	قیمت آن ۲۵۰۰۰ ریال بود	qeym1at- 1An b1ist o p1anj hez1Ar riy1Al b1ud
+?116	numbers	۵ کیلو برنج خریدم	p1anj kil1u ber1enj xar1idam
+117	numbers	جمعیت این شهر ۲ میلیون نفر است	jam'iy1at- 1in sh1ahr d1o mily1un naf1ar 1ast
+118	numbers	ساعت ۷ بیدار شدم	sA'1at- h1aft bid1Ar sh1odam
+?119	numbers	۴۰ سال پیش اینجا باغ بود	cheh1el s1Al p1ish inj1A b1Aq b1ud
+120	numbers	هر ماه ۳۰ روز دارد	har m1Ah s1i r1uz d1Arad
+121	numbers	او ۱۸ ساله است	1u hejd1ah sAl1e 1ast
+122	numbers	عدد ۷ را روی تخته نوشت	'ad1ad- h1aft rA r1uy- taxt1e nev1esht
+?123	numbers	۳٫۵ کیلومتر پیاده رفتیم	s1e o n1im kilum1etr piyAd1e r1aftim
+?124	numbers	قرار ما ساعت ۵ بعدازظهر است	qar1Ar- m1A sA'1at- p1anj- ba'dazz1ohr 1ast
+125	zwnj	او فردا می‌آید	1u fard1A m1iAyad
+126	zwnj	کتاب‌ها روی میز است	ketAbh1A r1uy- m1iz 1ast
+127	zwnj	کتابها روی میز است	ketAbh1A r1uy- m1iz 1ast
+128	zwnj	این کار می‌شود	1in k1Ar m1ishavad
+129	zwnj	این کار میشود	1in k1Ar m1ishavad
+130	zwnj	این منظره بی‌نظیر است	1in manzar1e binaz1ir 1ast
+131	zwnj	همکاری آن‌ها خوب بود	hamkAr1iy- Anh1A x1ub b1ud
+132	zwnj	نیم‌فاصله را رعایت کن	nimfAsel1e rA re'Ay1at k1on
+133	zwnj	دانش‌آموزان به مدرسه رفتند	dAneshAmuz1An be madras1e r1aftand
+134	zwnj	من هر روز می‌گویم	m1an har r1uz m1iguyam
+135	zwnj	این کار نمی‌شود	1in k1Ar n1emishavad
+136	zwnj	بچه‌ها بازی می‌کنند	bachcheh1A bAz1i m1ikonand
+137	zwnj	کتاب‌هایم را آوردم	ketAbh1Ayam rA Av1ordam
+138	zwnj	سال‌های گذشته سخت بود	sAlh1Ay- gozasht1e s1axt b1ud
+139	zwnj	روزنامه‌ها را خواندم	ruznAmeh1A rA x1Andam
+140	zwnj	آن‌ها آمدند	Anh1A Am1adand
+141	zwnj	آنها آمدند	Anh1A Am1adand
+142	arabic	مثلاً این کتاب را ببین	masal1an 1in ket1Ab rA b1ebin
+143	arabic	تقریباً همه آمدند	taqrib1an ham1e Am1adand
+144	arabic	لطفاً در را ببندید	lotf1an d1ar rA b1ebandid
+145	arabic	حتماً فردا می‌آیم	hatm1an fard1A m1iAyam
+146	arabic	اصلاً نمی‌دانستم	asl1an n1emidAnestam
+147	arabic	ظاهراً او رفته است	zAher1an 1u r1afte 1ast
+148	arabic	نسبتاً هوا خوب است	nesbat1an hav1A x1ub 1ast
+149	arabic	کتب قدیمی در کتابخانه است	kot1ob- qadim1i dar ketAbxAn1e 1ast
+150	arabic	مدارس فردا تعطیل است	madAr1es fard1A ta't1il 1ast
+151	arabic	عبدالله دیروز آمد	'abdoll1Ah dir1uz Am1ad
+?152	arabic	بالاخره به مقصد رسیدیم	belaxar1e be maqs1ad res1idim
+153	arabic	الان کجا هستی؟	al'1An koj1A h1asti ?
+154	arabic	مساجد این شهر قدیمی هستند	masAj1ed- 1in sh1ahr qadim1i h1astand
+155	arabic	اخبار را گوش کردم	axb1Ar rA g1ush k1ardam
+156	arabic	لطفاً توجه کنید	lotf1an tavajj1oh k1onid
+157	arabic	اطلاعات کافی نداریم	ettelA'1At- k1Afi n1adArim
+158	arabic	علاقه‌ی زیادی به موسیقی دارم	'alAq1ey- ziy1Adi be musiq1i d1Aram
+159	arabic	عملاً کاری نکردیم	'amal1an k1Ari n1akardim
+?160	arabic	حقیقتاً متأسفم	haqiqat1an mota'ass1efam
+161	arabic	دقیقاً همین است	daqiq1an ham1in 1ast
+162	arabic	عبدالحسین معلم مدرسه است	'abdolhos1eyn mo'all1em- madras1e 1ast
+163	arabic	ابداً چنین چیزی نگفتم	abad1an chen1in ch1izi n1agoftam
+164	foreign	کامپیوتر من خراب شد	kAmpiyut1er- m1an xar1Ab sh1od
+165	foreign	اینترنت قطع است	intern1et q1at' 1ast
+166	foreign	تلویزیون را روشن کن	telvizy1un rA rovsh1an k1on
+167	foreign	موبایلم را گم کردم	mob1Aylam rA g1om k1ardam
+168	foreign	پروژهٔ جدید شروع شد	porozh1ey- jad1id shor1u' sh1od
+169	foreign	از فرودگاه تاکسی گرفتم	az forudg1Ah tAks1i ger1eftam
+170	foreign	هتل نزدیک ایستگاه است	hot1el nazd1ik- istg1Ah 1ast
+171	foreign	آسانسور ساختمان خراب است	AsAns1or- sAxtem1An xar1Ab 1ast
+172	foreign	اتوبوس دیر آمد	otob1us d1ir Am1ad
+173	foreign	فیلم خوبی بود	f1ilm- x1ubi b1ud
+174	foreign	ایمیل را فرستادم	im1eyl rA ferest1Adam
+175	foreign	رادیو روشن بود	rAdiy1o rovsh1an b1ud
+176	foreign	لپ‌تاپ جدید خریدم	lapt1Ap- jad1id xar1idam
+177	foreign	با دوستانم به سینما رفتیم	bA dustAn1am be sinam1A r1aftim
+178	foreign	کلاس گیتار دارم	kel1As- git1Ar d1Aram
+?179	foreign	پیتزا سفارش دادیم	pitz1A sefAr1esh d1Adim
+180	punctuation	سلام، حال شما چطور است؟	sal1Am | h1Al- shom1A chet1ovr 1ast ?
+181	punctuation	من رفتم، او ماند.	m1an r1aftam | 1u m1And ||
+182	punctuation	چه زیبا!	ch1e zib1A !
+183	punctuation	کجا می‌روی؟	koj1A m1iravi ?
+184	punctuation	او گفت: «سلام».	1u g1oft | sal1Am ||
+?185	punctuation	او (برادر من) آمد.	1u | barAd1ar- m1an | Am1ad ||
+?186	punctuation	نمی‌دانم…	n1emidAnam |
+?187	punctuation	آیا شما فارسی صحبت می‌کنید؟	Ay1A shom1A fArs1i sohb1at m1ikonid ?
+188	punctuation	وای! چه خبر شد!	v1Ay ! ch1e xab1ar sh1od !
+189	punctuation	اول کتاب را بخوان، بعد بنویس.	avv1al ket1Ab rA b1exAn | b1a'd b1enevis ||
+190	punctuation	امروز شنبه است؛ فردا یکشنبه.	emr1uz shanb1e 1ast | fard1A yekshanb1e ||
+191	punctuation	سه چیز خریدم: نان، پنیر و چای.	s1e ch1iz xar1idam | n1An | pan1ir o ch1Ay ||
+?192	punctuation	نه! این درست نیست.	n1a ! 1in dor1ost n1ist ||
+193	punctuation	چرا نیامدی؟	cher1A n1ayAmadi ?
+194	punctuation	بله، حتماً.	b1ale | hatm1an ||
+?195	punctuation	خداحافظ!	xodAh1Afez !
+196	punctuation	او پرسید: «کی می‌آیی؟»	1u pors1id | k1ey m1iAyi ?
+?197	punctuation	با اینکه دیر شد، آمدیم.	bA 1inke d1ir sh1od | Am1adim ||
+198	punctuation	اگر بروی، خوشحال می‌شوم.	ag1ar b1eravi | xoshh1Al m1ishavam ||
+199	punctuation	متشکرم!	motashakk1eram !
+200	punctuation	او آمد، نشست و چای خورد.	1u Am1ad | nesh1ast o ch1Ay x1ord ||
+201	names	تهران پایتخت ایران است	tehr1An pAyt1axt- ir1An 1ast
+202	names	اصفهان شهر تاریخی است	esfah1An sh1ahr- tArix1i 1ast
+203	names	شیراز شهر شعر است	shir1Az sh1ahr- sh1e'r 1ast
+204	names	حافظ شاعر بزرگی بود	hAf1ez shA'1er- boz1orgi b1ud
+205	names	فردوسی شاهنامه را سرود	ferdovs1i shAhnAm1e rA sor1ud
+206	names	سعدی در شیراز به دنیا آمد	sa'd1i dar shir1Az be dony1A Am1ad
+207	names	مریم دانشجوی پزشکی است	mary1am dAneshj1uy- pezeshk1i 1ast
+208	names	علی به مشهد رفت	'al1i be mashh1ad r1aft
+209	names	مولوی شاعر ایرانی است	movlav1i shA'1er- irAn1i 1ast
+210	names	کوه دماوند بسیار بلند است	k1uh- damAv1and besy1Ar bol1and 1ast
+211	names	خلیج فارس در جنوب ایران است	xal1ij- f1Ars dar jon1ub- ir1An 1ast
+212	names	تبریز در شمال غربی ایران است	tabr1iz dar shom1Al- qarb1iy- ir1An 1ast
+213	names	یزد شهر کویری است	y1azd sh1ahr- kavir1i 1ast
+214	names	زهرا و رضا با هم آمدند	zahr1A o rez1A bA h1am Am1adand
+?215	names	خیام رباعیات معروفی دارد	xayy1Am robA'iy1At- ma'r1ufi d1Arad
+?216	names	کوروش پادشاه ایران بود	kur1osh pAdesh1Ah- ir1An b1ud
+217	general	امروز صبح با دوستم به کتابخانهٔ شهر رفتیم.	emr1uz s1obh bA d1ustam be ketAbxAn1ey- sh1ahr r1aftim ||
+218	general	هوای تهران در زمستان سرد و خشک است.	hav1Ay- tehr1An dar zemest1An s1ard o x1oshk 1ast ||
+219	general	مادرم هر روز صبح چای می‌خورد.	mAd1aram har r1uz s1obh ch1Ay m1ixorad ||
+220	general	کتابی که دیروز خریدم بسیار جالب بود.	ket1Abi ke dir1uz xar1idam besy1Ar jAl1eb b1ud ||
+221	general	دانش‌آموزان کلاس ما فردا امتحان ریاضی دارند.	dAneshAmuz1An- kel1As- m1A fard1A emtah1An- riyAz1i d1Arand ||
+?222	general	او گفت که فردا نمی‌تواند بیاید.	1u g1oft ke fard1A n1emitavAnad b1iyAyad ||
+223	general	قیمت خانه در این شهر بسیار بالا رفته است.	qeym1at- xAn1e dar 1in sh1ahr besy1Ar bAl1A r1afte 1ast ||
+224	general	در تعطیلات تابستان به شمال ایران سفر کردیم.	dar ta'til1At- tAbest1An be shom1Al- ir1An saf1ar k1ardim ||
+225	general	پدرم سال‌های زیادی در این کارخانه کار کرده است.	ped1aram sAlh1Ay- ziy1Adi dar 1in kArxAn1e k1Ar k1arde 1ast ||
+226	general	لطفاً پنجره را ببندید، هوا سرد است.	lotf1an panjar1e rA b1ebandid | hav1A s1ard 1ast ||
+227	general	کتاب‌های این نویسنده در سراسر جهان ترجمه شده است.	ketAbh1Ay- 1in nevisand1e dar sarAs1ar- jah1An tarjom1e sh1ode 1ast ||
+228	general	اگر فردا هوا خوب باشد، به پارک می‌رویم.	ag1ar fard1A hav1A x1ub b1Ashad | be p1Ark m1iravim ||
+229	general	او هر شب پیش از خواب کتاب می‌خواند.	1u har sh1ab p1ish az x1Ab ket1Ab m1ixAnad ||
+230	general	من نمی‌دانم که او کجا رفته است.	m1an n1emidAnam ke 1u koj1A r1afte 1ast ||
+231	general	برادرم در دانشگاه تهران مهندسی می‌خواند.	barAd1aram dar dAneshg1Ah- tehr1An mohandes1i m1ixAnad ||

@@ -1,0 +1,51 @@
+# Credentials. `.hugging` holds a Hugging Face access token; it must never
+# be committed. Kept at the top of this file so it is the first thing anyone
+# editing these rules sees.
+.hugging
+*.token
+.env
+.env.*
+!.env.example
+
+# Model weights and checkpoints. These belong on the Hub, not in git.
+*.pth
+*.pt
+*.ckpt
+*.onnx
+*.safetensors
+checkpoints/
+logs/
+runs/
+models/
+
+# Data. The corpus is streamed from the Hub and never lands in the repo.
+*.npy
+*.parquet
+*.wav
+*.flac
+*.mp3
+!assets/*.wav
+data/
+manifest/
+outputs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
