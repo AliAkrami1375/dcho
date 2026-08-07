@@ -311,6 +311,22 @@ class Trainer:
 
     # -- checkpoints ------------------------------------------------------
 
+    def save_generator(self, tag: str) -> Path:
+        """Write the generator alone - about a tenth of a full checkpoint.
+
+        A full checkpoint is dominated by the discriminators and their
+        optimiser moments, none of which is needed to listen to the model or
+        to watch a curve. Pushing the whole thing on every logging interval
+        spends a large share of a Colab session on upload rather than on
+        training.
+        """
+        path = self.output_dir / f"{tag}.G.pth"
+        torch.save(
+            {"step": self.state.step, "config": self.cfg, "net_g": self.net_g.state_dict()},
+            path,
+        )
+        return path
+
     def save(self, tag: str) -> Path:
         path = self.output_dir / f"{tag}.pth"
         payload = {
