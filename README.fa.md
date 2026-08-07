@@ -11,6 +11,8 @@
 [![Tests](https://img.shields.io/badge/tests-129%20passing-brightgreen.svg)](tests/)
 [![Corpus](https://img.shields.io/badge/corpus-417.5%20hours-orange.svg)](#پیکرهی-داده)
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AliAkrami1375/dcho/blob/main/notebooks/dcho_train.ipynb)
+
 [English](README.md) · **فارسی**
 
 </div>
@@ -508,6 +510,23 @@ dcho bench --threads 1 2 4
 موتور اجرا به `onnxruntime` و `numpy` وابسته است و عمداً به torch وابسته نیست — نصبی حدود ۵۰ مگابایت به‌جای دو گیگابایت.
 
 متن طولانی روی نشانه‌گذاری تقسیم و قطعه‌به‌قطعه سنتز می‌شود و هر قطعه به‌محض آماده شدن تحویل داده می‌شود. تأخیر تا اولین صدا دیگر با طول ورودی رشد نمی‌کند: یک پاراگراف به همان سرعتِ یک جمله شروع به صحبت می‌کند. زمان کل سنتز عوض نمی‌شود؛ تأخیر ادراک‌شده کاملاً عوض می‌شود.
+
+### آموزش روی Colab
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AliAkrami1375/dcho/blob/main/notebooks/dcho_train.ipynb)
+
+آموزش لزوماً روی Hugging Face Jobs اجرا نمی‌شود. نوت‌بوک [`notebooks/dcho_train.ipynb`](notebooks/dcho_train.ipynb) یک مرحله را روی Colab اجرا می‌کند و هر چک‌پوینت را روی Hub می‌فرستد، پس پایان یافتن یک نشست، هزینه‌ی کل اجرا را ندارد.
+
+دو چیز این را عملی می‌کند. لایه‌ی آموزش **از پیش بسته‌بندی می‌شود** به یک مجموعه‌ی فشرده‌ی FLAC — چهار گیگابایت برای `tier_a` به‌جای پیکره‌ی ۴۷ گیگابایتی — و بردار گوینده‌ی هر کلیپ در همان سطر جاسازی شده، پس هر نشست دقیقاً یک دانلود لازم دارد. و حلقه **از روی Hub ادامه می‌دهد**، که ناگزیر است: Colab در نسخه‌ی رایگان حدود ۱۲ ساعت و در Pro حدود ۲۴ ساعت به هر نشست می‌دهد، در حالی که مرحله‌ی دو حدود ۷۴ ساعت GPU لازم دارد.
+
+از نظر هزینه‌ی هر ساعت GPU هم ارزان‌تر است. Colab هر ۱۰۰ واحد محاسباتی را ۹.۹۹ دلار می‌فروشد:
+
+| GPU | واحد بر ساعت | ≈ دلار بر ساعت | Hugging Face Jobs |
+|---|---|---|---|
+| T4 | ~۱.۱۹ | **~۰.۱۲** | ۰.۴۰ |
+| A100 ۴۰ گیگ | ~۵.۴۰ | **~۰.۵۴** | ۲.۵۰ |
+
+معاوضه‌اش مالی نیست، عملیاتی است: کار روی Jobs ثبت می‌شود و فراموش، ولی Colab یک نشست مرورگر می‌خواهد و در پایان نشست ماشین را پس می‌گیرد.
 
 ### توسعه
 

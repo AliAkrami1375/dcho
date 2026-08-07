@@ -46,12 +46,31 @@ class DataConfig:
     max_text_length: int = 400
 
 
-def _read_wav(blob: bytes) -> np.ndarray | None:
-    """Decode a WAV blob to mono float32 without a soundfile dependency.
+def _read_audio(blob: bytes) -> np.ndarray | None:
+    """Decode an audio blob to mono float32.
 
-    Only the subset of WAV the corpus actually uses is handled: PCM 16-bit.
-    Anything else returns None and the row is skipped rather than guessed at.
+    Two containers reach this function. The raw corpus is 16-bit PCM WAV,
+    which the standard library handles with no dependency at all. Packed
+    subsets are FLAC, which halves their size for repeated downloads and
+    needs soundfile. Trying stdlib first keeps the common path dependency
+    free and the FLAC path is only reached when it is actually FLAC.
     """
+    audio = _read_wav(blob)
+    if audio is not None:
+        return audio
+    try:
+        import soundfile as sf
+
+        data, sr = sf.read(io.BytesIO(blob), dtype="float32", always_2d=True)
+    except Exception:
+        return None
+    if sr != TARGET_SR:
+        return None
+    return data[:, 0] if data.shape[1] == 1 else data.mean(axis=1)
+
+
+def _read_wav(blob: bytes) -> np.ndarray | None:
+    """Decode 16-bit PCM WAV using only the standard library."""
     import wave
 
     try:
@@ -176,7 +195,7 @@ class ParquetSpeechDataset(IterableDataset):
                 if len(text) > cfg.max_text_length:
                     continue
 
-                audio = _read_wav(blob)
+                audio = _read_audio(blob)
                 if audio is None:
                     continue
                 seconds = len(audio) / cfg.sampling_rate

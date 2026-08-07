@@ -11,6 +11,8 @@
 [![Tests](https://img.shields.io/badge/tests-129%20passing-brightgreen.svg)](tests/)
 [![Corpus](https://img.shields.io/badge/corpus-417.5%20hours-orange.svg)](#the-corpus)
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AliAkrami1375/dcho/blob/main/notebooks/dcho_train.ipynb)
+
 **English** · [فارسی](README.fa.md)
 
 </div>
@@ -671,6 +673,34 @@ Long text is split at punctuation and synthesised chunk by chunk, each
 yielded as soon as it is ready. Time to first audio then stops growing with
 input length: a paragraph starts speaking as quickly as a sentence does.
 Total synthesis time is unchanged; perceived latency is not.
+
+### Training on Colab
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AliAkrami1375/dcho/blob/main/notebooks/dcho_train.ipynb)
+
+Training does not have to run on Hugging Face Jobs. The notebook at
+[`notebooks/dcho_train.ipynb`](notebooks/dcho_train.ipynb) runs a phase on
+Colab and pushes every checkpoint to the Hub, so a session that ends does
+not cost the run.
+
+Two things make this practical. The training tier is **packed in advance**
+into a compact FLAC dataset — 4 GB for `tier_a` instead of the 47 GB corpus
+— with each clip's speaker vector embedded in the same row, so a session
+needs exactly one download. And the loop **resumes from the Hub**, which it
+must: Colab gives roughly 12 hours per session on the free tier and 24 on
+Pro, while phase 2 needs about 74 GPU-hours.
+
+Per GPU-hour it is also cheaper. Colab sells compute units at $9.99 per
+100:
+
+| GPU | units/hour | ≈ $/hour | Hugging Face Jobs |
+|---|---|---|---|
+| T4 | ~1.19 | **~0.12** | 0.40 |
+| A100 40 GB | ~5.40 | **~0.54** | 2.50 |
+
+The tradeoff is operational rather than financial: Jobs are submitted and
+forgotten, Colab needs a browser session and hands back a machine when the
+session ends.
 
 ### Development
 
