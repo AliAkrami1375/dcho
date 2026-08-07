@@ -19,15 +19,17 @@ runs/
 models/
 
 # Data. The corpus is streamed from the Hub and never lands in the repo.
+# The leading slash matters: a bare `data/` would also swallow the source
+# package at dcho/data/.
 *.npy
 *.parquet
 *.wav
 *.flac
 *.mp3
 !assets/*.wav
-data/
-manifest/
-outputs/
+/data/
+/manifest/
+/outputs/
 
 # Python
 __pycache__/
