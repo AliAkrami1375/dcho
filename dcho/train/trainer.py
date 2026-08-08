@@ -242,6 +242,9 @@ class Trainer:
 
     # -- loop -------------------------------------------------------------
 
+    def current_lr(self) -> float:
+        return self.sched_g.get_last_lr()[0]
+
     def train(self, loader, max_steps: int, log_every: int | None = None,
               checkpoint_every: int | None = None, on_log=None) -> TrainState:
         log_every = log_every or self.train_cfg.get("log_interval", 100)
@@ -328,15 +331,35 @@ class Trainer:
         return path
 
     def save(self, tag: str) -> Path:
+        """Write everything needed to continue as though nothing happened.
+
+        The schedulers and the loss scaler are part of that. Leaving them
+        out looks harmless because the run still starts - but an
+        ExponentialLR restarted at step zero puts the learning rate back to
+        its initial value, which after twenty thousand steps is a jump of
+        more than fifty times and undoes the run.
+        """
         path = self.output_dir / f"{tag}.pth"
         payload = {
             "step": self.state.step,
             "epoch": self.state.epoch,
             "config": self.cfg,
+            "history": self.state.history[-500:],
             "net_g": self.net_g.state_dict(),
             "net_d": self.net_d.state_dict(),
             "opt_g": self.opt_g.state_dict(),
             "opt_d": self.opt_d.state_dict(),
+            "sched_g": self.sched_g.state_dict(),
+            "sched_d": self.sched_d.state_dict(),
+            "scaler": self.scaler.state_dict(),
+            # The model samples during training - the posterior encoder, the
+            # stochastic duration predictor, dropout, the random segment
+            # slice. Without the generator state a resumed run continues
+            # from a different point in the random stream, which is not
+            # wrong but is not reproducible either.
+            "rng": torch.get_rng_state(),
+            "rng_cuda": (torch.cuda.get_rng_state_all()
+                         if torch.cuda.is_available() else None),
         }
         if self.net_dur_d is not None:
             payload["net_dur_d"] = self.net_dur_d.state_dict()
@@ -345,9 +368,12 @@ class Trainer:
         return path
 
     def load(self, path: str | Path, weights_only: bool = False) -> None:
+        """Restore a run. `weights_only` loads the generator alone, which is
+        what a generator snapshot contains."""
         ckpt = torch.load(path, map_location=self.device, weights_only=False)
         self.net_g.load_state_dict(ckpt["net_g"])
-        if weights_only:
+        if weights_only or "net_d" not in ckpt:
+            self.state.step = ckpt.get("step", self.state.step)
             return
         self.net_d.load_state_dict(ckpt["net_d"])
         self.opt_g.load_state_dict(ckpt["opt_g"])
@@ -355,8 +381,33 @@ class Trainer:
         if self.net_dur_d is not None and "net_dur_d" in ckpt:
             self.net_dur_d.load_state_dict(ckpt["net_dur_d"])
             self.opt_dur.load_state_dict(ckpt["opt_dur"])
+
         self.state.step = ckpt.get("step", 0)
         self.state.epoch = ckpt.get("epoch", 0)
+        self.state.history = list(ckpt.get("history", []))
+
+        if "sched_g" in ckpt:
+            self.sched_g.load_state_dict(ckpt["sched_g"])
+            self.sched_d.load_state_dict(ckpt["sched_d"])
+        else:
+            # An older checkpoint predates scheduler state. Fast-forward the
+            # decay to where this step should be rather than silently
+            # resuming at the initial learning rate.
+            for _ in range(self.state.step):
+                self.sched_g.step()
+                self.sched_d.step()
+        if "scaler" in ckpt:
+            self.scaler.load_state_dict(ckpt["scaler"])
+        if ckpt.get("rng") is not None:
+            torch.set_rng_state(ckpt["rng"].cpu().to(torch.uint8))
+        if ckpt.get("rng_cuda") is not None and torch.cuda.is_available():
+            try:
+                torch.cuda.set_rng_state_all(ckpt["rng_cuda"])
+            except Exception:
+                # A checkpoint made on a machine with a different GPU count
+                # cannot restore per-device state; the run continues from a
+                # fresh stream rather than failing.
+                pass
 
     def _write_summary(self, halted: TrainingHalted | None = None) -> None:
         summary = {
